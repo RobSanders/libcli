@@ -18,8 +18,8 @@ LIB_STATIC = libcli.a
 CC = gcc
 AR = ar
 ARFLAGS = rcs
-DEBUG = -g
-OPTIM = -O3
+DEBUG = -g3
+OPTIM = 
 override CFLAGS += $(DEBUG) $(OPTIM) -Wall -std=c99 -pedantic -Wformat-security -Wno-format-zero-length -Werror -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wsign-compare -Wcast-align -Wno-unused-parameter
 override LDFLAGS += -shared
 override LIBPATH += -L.
@@ -55,7 +55,7 @@ $(LIB_STATIC): libcli.o
 libcli.o: libcli.h
 
 clitest: clitest.o $(LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< -L. -lcli
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< libcli.c -lcrypt
 
 clitest.exe: clitest.c libcli.o
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< libcli.o -lws2_32
