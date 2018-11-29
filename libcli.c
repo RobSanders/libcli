@@ -898,11 +898,14 @@ static int cli_get_completions(struct cli_def *cli, const char *command, char **
   if (filter)  // complete filters
   {
     unsigned len = 0;
-
-    if (filter < num_words - 1)  // filter already completed
+    int filter_cmd = filter + 1; // index of word (if any) after the latest '|'
+    
+    // if we have more than one word after the filter, assume it is complete
+    if ((num_words - filter_cmd) >  1) // filter already completed
       goto out;
 
-    if (filter == num_words - 1) len = strlen(words[num_words - 1]);
+    // if the filter_cmd *is* the last word, get the length for completors.
+    if (((num_words - filter_cmd) == 1) && words[num_words-1]) len = strlen(words[num_words - 1]);
 
     for (i = 0; filter_cmds[i].cmd && k < max_completions; i++) {
       if (!len || (len < strlen(filter_cmds[i].cmd) && !strncmp(filter_cmds[i].cmd, words[num_words - 1], len)))
@@ -1734,7 +1737,7 @@ void cli_error(struct cli_def *cli, const char *format, ...) {
   va_list ap;
 
   va_start(ap, format);
-  _print(cli, PRINT_PLAIN, format, ap);
+  _print(cli, PRINT_FILTERED, format, ap);
   va_end(ap);
 }
 
