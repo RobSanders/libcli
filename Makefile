@@ -15,11 +15,14 @@ REVISION = 8
 LIB = libcli.so
 LIB_STATIC = libcli.a
 
+SOURCES = libcli.c telnet_processing.c
+OBJECTS = $(SOURCES:.c=.o)
+
 CC = gcc
 AR = ar
 ARFLAGS = rcs
-DEBUG = -g
-OPTIM = -O3
+DEBUG = -g3
+OPTIM = 
 override CFLAGS += $(DEBUG) $(OPTIM) -Wall -std=c99 -pedantic -Wformat-security -Wno-format-zero-length -Werror -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wsign-compare -Wcast-align -Wno-unused-parameter
 override LDFLAGS += -shared
 override LIBPATH += -L.
@@ -40,25 +43,23 @@ endif
 
 all: $(TARGET_LIBS) $(if $(filter 1,$(TESTS)),clitest)
 
-$(LIB): libcli.o
+$(LIB): $(OBJECTS)
 	$(CC) -o $(LIB).$(MAJOR).$(MINOR).$(REVISION) $^ $(LDFLAGS) $(LIBS)
 	-rm -f $(LIB) $(LIB).$(MAJOR).$(MINOR)
 	ln -s $(LIB).$(MAJOR).$(MINOR).$(REVISION) $(LIB).$(MAJOR).$(MINOR)
 	ln -s $(LIB).$(MAJOR).$(MINOR) $(LIB)
 
-$(LIB_STATIC): libcli.o
+$(LIB_STATIC): $(OBJECTS)
 	$(AR) $(ARFLAGS) $@ $^
 
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -o $@ -c $<
 
-libcli.o: libcli.h
-
 clitest: clitest.o $(LIB)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< -L. -lcli
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< -L. $(OBJECTS) -lcrypt
 
-clitest.exe: clitest.c libcli.o
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< libcli.o -lws2_32
+clitest.exe: clitest.c $(OBJECTS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(OBJECTS) -lws2_32
 
 clean:
 	rm -f *.o $(LIB)* $(LIB_STATIC) clitest libcli-$(MAJOR).$(MINOR).$(REVISION).tar.gz

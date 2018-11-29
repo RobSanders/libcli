@@ -1008,7 +1008,7 @@ static int show_prompt(struct cli_def *cli, int sockfd) {
 
 int cli_loop(struct cli_def *cli, int sockfd) {
   unsigned char c;
-  int n, l, oldl = 0, is_telnet_option = 0, skip = 0, esc = 0, cursor = 0;
+  int n, l, oldl = 0, skip = 0, esc = 0, cursor = 0;
   char *cmd = NULL, *oldcmd = 0;
   char *username = NULL, *password = NULL;
 
@@ -1018,10 +1018,12 @@ int cli_loop(struct cli_def *cli, int sockfd) {
   cli_free_history(cli);
   if (cli->telnet_protocol) {
     static const char *negotiate =
-        "\xFF\xFB\x03"
-        "\xFF\xFB\x01"
-        "\xFF\xFD\x03"
-        "\xFF\xFD\x01";
+	"\xFF\xFB\x03"  // IAC WILL SUPPRESS GO AHEAD
+        "\xFF\xFB\x01"  // IAC WILL ECHO
+        "\xFF\xFD\x03"  // IAC DO SUPPRESS GO AHEAD
+        "\xFF\xFD\x01"  // IAC DO ECHO
+        "\xFF\xFD\x1F"  // IAC DO NAMS
+	;
     _write(sockfd, negotiate, strlen(negotiate));
   }
 
@@ -1166,23 +1168,8 @@ int cli_loop(struct cli_def *cli, int sockfd) {
         continue;
       }
 
-      if (c == 255 && !is_telnet_option) {
-        is_telnet_option++;
+      if (cli->telnet_protocol && cli_handle_telnet(c)) {
         continue;
-      }
-
-      if (is_telnet_option) {
-        if (c >= 251 && c <= 254) {
-          is_telnet_option = c;
-          continue;
-        }
-
-        if (c != 255) {
-          is_telnet_option = 0;
-          continue;
-        }
-
-        is_telnet_option = 0;
       }
 
       /* handle ANSI arrows */
@@ -1974,3 +1961,4 @@ void cli_set_context(struct cli_def *cli, void *context) {
 void *cli_get_context(struct cli_def *cli) {
   return cli->user_context;
 }
+

@@ -10,6 +10,7 @@ extern "C" {
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <stdbool.h>
 
 #define LIBCLI_VERSION_MAJOR 1
 #define LIBCLI_VERISON_MINOR 9
@@ -90,46 +91,48 @@ struct cli_command {
   struct cli_command *parent;
 };
 
-struct cli_def *cli_init();
-int cli_done(struct cli_def *cli);
-struct cli_command *cli_register_command(struct cli_def *cli, struct cli_command *parent, const char *command,
+extern struct cli_def *cli_init();
+extern int cli_done(struct cli_def *cli);
+extern struct cli_command *cli_register_command(struct cli_def *cli, struct cli_command *parent, const char *command,
                                          int (*callback)(struct cli_def *, const char *, char **, int), int privilege,
                                          int mode, const char *help);
-int cli_unregister_command(struct cli_def *cli, const char *command);
-int cli_run_command(struct cli_def *cli, const char *command);
-int cli_loop(struct cli_def *cli, int sockfd);
-int cli_file(struct cli_def *cli, FILE *fh, int privilege, int mode);
-void cli_set_auth_callback(struct cli_def *cli, int (*auth_callback)(const char *, const char *));
-void cli_set_enable_callback(struct cli_def *cli, int (*enable_callback)(const char *));
-void cli_allow_user(struct cli_def *cli, const char *username, const char *password);
-void cli_allow_enable(struct cli_def *cli, const char *password);
-void cli_deny_user(struct cli_def *cli, const char *username);
-void cli_set_banner(struct cli_def *cli, const char *banner);
-void cli_set_hostname(struct cli_def *cli, const char *hostname);
-void cli_set_promptchar(struct cli_def *cli, const char *promptchar);
-void cli_set_modestring(struct cli_def *cli, const char *modestring);
-int cli_set_privilege(struct cli_def *cli, int privilege);
-int cli_set_configmode(struct cli_def *cli, int mode, const char *config_desc);
-void cli_reprompt(struct cli_def *cli);
-void cli_regular(struct cli_def *cli, int (*callback)(struct cli_def *cli));
-void cli_regular_interval(struct cli_def *cli, int seconds);
-void cli_print(struct cli_def *cli, const char *format, ...) __attribute__((format(printf, 2, 3)));
-void cli_bufprint(struct cli_def *cli, const char *format, ...) __attribute__((format(printf, 2, 3)));
-void cli_vabufprint(struct cli_def *cli, const char *format, va_list ap);
-void cli_error(struct cli_def *cli, const char *format, ...) __attribute__((format(printf, 2, 3)));
-void cli_print_callback(struct cli_def *cli, void (*callback)(struct cli_def *, const char *));
-void cli_free_history(struct cli_def *cli);
-void cli_set_idle_timeout(struct cli_def *cli, unsigned int seconds);
-void cli_set_idle_timeout_callback(struct cli_def *cli, unsigned int seconds, int (*callback)(struct cli_def *));
+extern int cli_unregister_command(struct cli_def *cli, const char *command);
+extern int cli_run_command(struct cli_def *cli, const char *command);
+extern int cli_loop(struct cli_def *cli, int sockfd);
+extern int cli_file(struct cli_def *cli, FILE *fh, int privilege, int mode);
+extern void cli_set_auth_callback(struct cli_def *cli, int (*auth_callback)(const char *, const char *));
+extern void cli_set_enable_callback(struct cli_def *cli, int (*enable_callback)(const char *));
+extern void cli_allow_user(struct cli_def *cli, const char *username, const char *password);
+extern void cli_allow_enable(struct cli_def *cli, const char *password);
+extern void cli_deny_user(struct cli_def *cli, const char *username);
+extern void cli_set_banner(struct cli_def *cli, const char *banner);
+extern void cli_set_hostname(struct cli_def *cli, const char *hostname);
+extern void cli_set_promptchar(struct cli_def *cli, const char *promptchar);
+extern void cli_set_modestring(struct cli_def *cli, const char *modestring);
+extern int cli_set_privilege(struct cli_def *cli, int privilege);
+extern int cli_set_configmode(struct cli_def *cli, int mode, const char *config_desc);
+extern void cli_reprompt(struct cli_def *cli);
+extern void cli_regular(struct cli_def *cli, int (*callback)(struct cli_def *cli));
+extern void cli_regular_interval(struct cli_def *cli, int seconds);
+extern void cli_print(struct cli_def *cli, const char *format, ...) __attribute__((format(printf, 2, 3)));
+extern void cli_bufprint(struct cli_def *cli, const char *format, ...) __attribute__((format(printf, 2, 3)));
+extern void cli_vabufprint(struct cli_def *cli, const char *format, va_list ap);
+extern void cli_error(struct cli_def *cli, const char *format, ...) __attribute__((format(printf, 2, 3)));
+extern void cli_print_callback(struct cli_def *cli, void (*callback)(struct cli_def *, const char *));
+extern void cli_free_history(struct cli_def *cli);
+extern void cli_set_idle_timeout(struct cli_def *cli, unsigned int seconds);
+extern void cli_set_idle_timeout_callback(struct cli_def *cli, unsigned int seconds, int (*callback)(struct cli_def *));
 
 // Enable or disable telnet protocol negotiation.
 // Note that this is enabled by default and must be changed before cli_loop() is run.
-void cli_telnet_protocol(struct cli_def *cli, int telnet_protocol);
+extern void cli_telnet_protocol(struct cli_def *cli, int telnet_protocol);
 
 // Set/get user context
-void cli_set_context(struct cli_def *cli, void *context);
-void *cli_get_context(struct cli_def *cli);
+extern void cli_set_context(struct cli_def *cli, void *context);
+extern void *cli_get_context(struct cli_def *cli);
 
+// Telnet protocol processing
+extern bool cli_handle_telnet(unsigned char c);
 #ifdef __cplusplus
 }
 #endif
