@@ -32,6 +32,23 @@
 #define MATCH_REGEX 1
 #define MATCH_INVERT 2
 
+
+
+// forward declarations for internals
+static int cli_int_enable(struct cli_def *cli, UNUSED(const char *command), UNUSED(char *argv[]), UNUSED(int argc)) ;
+static int cli_int_disable(struct cli_def *cli, UNUSED(const char *command), UNUSED(char *argv[]), UNUSED(int argc)) ;
+static int cli_int_help(struct cli_def *cli, UNUSED(const char *command), UNUSED(char *argv[]), UNUSED(int argc)) ;
+static int cli_int_history(struct cli_def *cli, UNUSED(const char *command), UNUSED(char *argv[]), UNUSED(int argc)) ;
+static int cli_int_quit(struct cli_def *cli, UNUSED(const char *command), UNUSED(char *argv[]), UNUSED(int argc)) ;
+static int cli_int_exit(struct cli_def *cli, const char *command, char *argv[], int argc) ;
+static void cli_int_process_telnet_command(struct cli_def *cli, unsigned char *buf, int length);
+static void cli_int_process_telnet_negotiation_payload(struct cli_def *cli, unsigned char *buf, int length);
+static bool cli_int_handle_telnet(struct cli_def *cli, unsigned char c);
+static void cli_int_set_effective_terminal_size(struct cli_def *cli) ;
+static int cli_int_terminal_size(struct cli_def *cli, const char *command, char *argv[], int argc) ;
+
+
+
 #ifdef WIN32
 /*
  * Stupid windows has multiple namespaces for filedescriptors, with different
@@ -493,6 +510,50 @@ int cli_int_configure_terminal(struct cli_def *cli, UNUSED(const char *command),
   return CLI_OK;
 }
 
+int cli_int_terminal_size(struct cli_def *cli, const char *command, char *argv[], int argc) {
+  int retval = CLI_OK;
+  char *endptr=NULL;
+  int value;
+  
+  if (argc>1) {
+    cli_error(cli, "Extra arguments on command line");
+    retval = CLI_ERROR;    
+  }
+  else if (strstr(command, " height")) {
+    if (argc==0) {
+      cli_print(cli, "Terminal heigth set to %d", cli->terminfo->terminal_height);
+    } else {
+      errno=0;
+      value = strtol(argv[0], &endptr, 10);
+      if (*endptr!='\0' || errno==ERANGE) {
+        cli_error(cli, "Unable to process argument");
+        retval = CLI_ERROR;
+      }
+      cli_set_terminal_height(cli, value);
+    }
+  }
+  else if (strstr(command, " width")) {
+    if (argc==0) {
+      cli_print(cli, "Terminal width set to %d", cli->terminfo->terminal_width);
+    } else {
+      value = strtol(argv[0], &endptr, 10);
+      if (*endptr!='\0' || errno==ERANGE) {
+        cli_error(cli, "Unable to process argument");
+        retval = CLI_ERROR;
+      }
+      cli_set_terminal_width(cli, value);
+    }
+  }
+  
+  
+  return retval;
+}
+
+
+
+
+
+
 struct cli_def *cli_init() {
   struct cli_def *cli;
   struct cli_command *c;
@@ -501,9 +562,15 @@ struct cli_def *cli_init() {
 
   cli->buf_size = 1024;
   if (!(cli->buffer = calloc(cli->buf_size, 1))) {
-    free_z(cli);
+    cli_done(cli);
     return 0;
   }
+
+  if (!(cli->terminfo = calloc(sizeof(struct cli_terminfo), 1))) {
+    cli_done(cli);
+    return 0;
+  }
+
   cli->telnet_protocol = 1;
 
   cli_register_command(cli, 0, "help", cli_int_help, PRIVILEGE_UNPRIVILEGED, MODE_ANY, "Show available commands");
@@ -521,6 +588,11 @@ struct cli_def *cli_init() {
   cli_register_command(cli, c, "terminal", cli_int_configure_terminal, PRIVILEGE_PRIVILEGED, MODE_EXEC,
                        "Configure from the terminal");
 
+  c = cli_register_command(cli, 0, "terminal", 0, PRIVILEGE_UNPRIVILEGED, MODE_ANY, "Set terminal height/width");
+  cli_register_command(cli, c, "height", cli_int_terminal_size, PRIVILEGE_UNPRIVILEGED, MODE_ANY, "Set terminal height");
+  cli_register_command(cli, c, "width", cli_int_terminal_size, PRIVILEGE_UNPRIVILEGED, MODE_ANY, "Set terminal width");
+
+
   cli->privilege = cli->mode = -1;
   cli_set_privilege(cli, PRIVILEGE_UNPRIVILEGED);
   cli_set_configmode(cli, MODE_EXEC, 0);
@@ -534,7 +606,7 @@ struct cli_def *cli_init() {
   return cli;
 }
 
-void cli_unregister_all(struct cli_def *cli, struct cli_command *command) {
+void cli_int_unregister_all(struct cli_def *cli, struct cli_command *command) {
   struct cli_command *c, *p = NULL;
 
   if (!command) command = cli->commands;
@@ -544,7 +616,7 @@ void cli_unregister_all(struct cli_def *cli, struct cli_command *command) {
     p = c->next;
 
     // Unregister all child commands
-    if (c->children) cli_unregister_all(cli, c->children);
+    if (c->children) cli_int_unregister_all(cli, c->children);
 
     if (c->command) free(c->command);
     if (c->help) free(c->help);
@@ -552,6 +624,12 @@ void cli_unregister_all(struct cli_def *cli, struct cli_command *command) {
 
     c = p;
   }
+}
+
+void cli_unregister_all(struct cli_def *cli) {
+  cli_int_unregister_all(cli, 0);
+  // underlying data freed, just need to set pointer to zero
+  cli->commands=NULL;
 }
 
 int cli_done(struct cli_def *cli) {
@@ -570,7 +648,7 @@ int cli_done(struct cli_def *cli) {
   }
 
   /* free all commands */
-  cli_unregister_all(cli, 0);
+  cli_unregister_all(cli);
 
   free_z(cli->commandname);
   free_z(cli->modestring);
@@ -578,6 +656,7 @@ int cli_done(struct cli_def *cli) {
   free_z(cli->promptchar);
   free_z(cli->hostname);
   free_z(cli->buffer);
+  free_z(cli->terminfo);
   free_z(cli);
 
   return CLI_OK;
@@ -1018,12 +1097,12 @@ int cli_loop(struct cli_def *cli, int sockfd) {
   cli_free_history(cli);
   if (cli->telnet_protocol) {
     static const char *negotiate =
-	"\xFF\xFB\x03"  // IAC WILL SUPPRESS GO AHEAD
+        "\xFF\xFB\x03"  // IAC WILL SUPPRESS GO AHEAD
         "\xFF\xFB\x01"  // IAC WILL ECHO
         "\xFF\xFD\x03"  // IAC DO SUPPRESS GO AHEAD
         "\xFF\xFD\x01"  // IAC DO ECHO
         "\xFF\xFD\x1F"  // IAC DO NAMS
-	;
+        ;
     _write(sockfd, negotiate, strlen(negotiate));
   }
 
@@ -1168,7 +1247,7 @@ int cli_loop(struct cli_def *cli, int sockfd) {
         continue;
       }
 
-      if (cli->telnet_protocol && cli_handle_telnet(c)) {
+      if (cli->telnet_protocol && cli_int_handle_telnet(cli, c)) {
         continue;
       }
 
@@ -1960,5 +2039,131 @@ void cli_set_context(struct cli_def *cli, void *context) {
 
 void *cli_get_context(struct cli_def *cli) {
   return cli->user_context;
+}
+
+
+#define TELNET_IAC 255
+#define TELNET_SE 240
+#define TELNET_SB 250
+#define TELNET_NAWS 31
+
+enum TELNET_STATE 
+{
+  TELNET_INACTIVE,
+  TELNET_COMMAND,
+  TELNET_OPERATION,
+  TELNET_NEGOTIATION_PAYLOAD,
+  TELNET_ESCAPE,
+};
+
+
+void cli_int_process_telnet_command(struct cli_def *cli, unsigned char *buf, int length){
+//      Swallow silently all unsolicited responses for now from the other end
+}
+
+void cli_int_process_telnet_negotiation_payload(struct cli_def *cli, unsigned char *buf, int length){
+   // Ignore silently all negation payloads except NAWS
+  if (buf[2] == TELNET_NAWS)  {
+    int new_x = (buf[3]<<8) + buf[4];
+    int new_y = (buf[5]<<8) + buf[6];
+    cli_set_detected_terminal_size(cli, new_x, new_y);
+  }
+}
+
+bool cli_int_handle_telnet(struct cli_def *cli, unsigned char c){
+  static unsigned char telnet_buffer[100];
+  static int telnet_count=0;
+  static enum TELNET_STATE telnet_state=TELNET_INACTIVE;
+  bool reset=false;
+  
+  switch(telnet_state) {
+    case (TELNET_COMMAND):
+      telnet_buffer[telnet_count++]=c;
+      if (c==TELNET_SB)
+      {
+        telnet_state = TELNET_NEGOTIATION_PAYLOAD;
+      }
+      else
+      {
+        telnet_state = TELNET_OPERATION;
+      }
+      break;
+    case (TELNET_OPERATION):
+      telnet_buffer[telnet_count++]=c;
+      cli_int_process_telnet_command(cli, telnet_buffer, telnet_count);
+      reset = true;
+      break;
+    case (TELNET_NEGOTIATION_PAYLOAD):
+      if (c==TELNET_IAC) {
+        telnet_state = TELNET_ESCAPE;
+      }
+      else {
+        telnet_buffer[telnet_count++]=c;
+      }
+      break;
+    case (TELNET_ESCAPE):
+      if (c==TELNET_IAC) {
+        telnet_buffer[telnet_count++]=c;
+        telnet_state = TELNET_NEGOTIATION_PAYLOAD;
+      }
+      else if (c==TELNET_SE) {
+        cli_int_process_telnet_negotiation_payload(cli, telnet_buffer, telnet_count);
+        reset = true;
+      }
+      else {
+        reset = true;
+      }
+      break;
+    default:
+      if (c == TELNET_IAC) {
+        telnet_buffer[telnet_count++] = c;
+        telnet_state = TELNET_COMMAND;    
+      }
+      else {
+        telnet_state = TELNET_INACTIVE;
+      }
+      break;
+  }
+
+  if (reset == true)  {
+    memset(telnet_buffer, 0, sizeof(telnet_buffer));
+    telnet_count=0;
+    telnet_state = TELNET_INACTIVE;
+  }
+  return ((telnet_state!=TELNET_INACTIVE) || (reset==true));
+}
+
+void cli_int_set_effective_terminal_size(struct cli_def *cli) {
+  struct cli_terminfo *p = cli->terminfo;
+  p->terminal_width = (p->user_terminal_width > 0) ? p->user_terminal_width: p->detected_terminal_width;
+  p->terminal_height = (p->user_terminal_height  > 0) ? p->user_terminal_height: p->detected_terminal_height;
+    
+
+  printf("(%d,%d)/(%d,%d) = (%d,%d)\n", p->detected_terminal_width, p->detected_terminal_height,
+                                        p->user_terminal_width, p->user_terminal_height,
+                                        p->terminal_width, p->terminal_height);
+}
+
+void cli_set_detected_terminal_size(struct cli_def *cli, int width, int height) {
+  struct cli_terminfo *p = cli->terminfo;
+  p->detected_terminal_width = width;
+  p->detected_terminal_height = height;
+  cli_int_set_effective_terminal_size(cli);
+}
+
+void cli_set_terminal_height(struct cli_def *cli, int height) {
+  cli->terminfo->user_terminal_height = height;
+  cli_int_set_effective_terminal_size(cli);
+}
+void cli_set_terminal_width(struct cli_def *cli, int width) {
+  cli->terminfo->user_terminal_width = width;
+  cli_int_set_effective_terminal_size(cli);
+}
+
+void cli_set_terminal_size(struct cli_def *cli, int width, int height) {
+  struct cli_terminfo *p = cli->terminfo;
+  p->user_terminal_width = width;
+  p->user_terminal_height = height;
+  cli_int_set_effective_terminal_size(cli);
 }
 

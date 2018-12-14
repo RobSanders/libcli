@@ -174,22 +174,9 @@ void pc(UNUSED(struct cli_def *cli), const char *string) {
   printf("%s\n", string);
 }
 
-int main() {
+void run_child(int x) {
   struct cli_command *c;
   struct cli_def *cli;
-  int s, x;
-  struct sockaddr_in addr;
-  int on = 1;
-
-#ifndef WIN32
-  signal(SIGCHLD, SIG_IGN);
-#endif
-#ifdef WIN32
-  if (!winsock_init()) {
-    printf("Error initialising winsock\n");
-    return 1;
-  }
-#endif
 
   // Prepare a small user context
   char mymessage[] = "I contain user data!";
@@ -242,6 +229,25 @@ int main() {
       fclose(fh);
     }
   }
+  cli_loop(cli, x);
+  cli_done(cli);
+}
+
+int main() {
+  int s, x;
+  struct sockaddr_in addr;
+  int on = 1;
+
+#ifndef WIN32
+  signal(SIGCHLD, SIG_IGN);
+#endif
+#ifdef WIN32
+  if (!winsock_init()) {
+    printf("Error initialising winsock\n");
+    return 1;
+  }
+#endif
+
 
   if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("socket");
@@ -287,15 +293,14 @@ int main() {
 
     /* child */
     close(s);
-    cli_loop(cli, x);
+    run_child(x);
     exit(0);
 #else
-    cli_loop(cli, x);
+    run_child(x);
     shutdown(x, SD_BOTH);
     close(x);
 #endif
   }
 
-  cli_done(cli);
   return 0;
 }

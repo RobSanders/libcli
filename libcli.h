@@ -71,6 +71,7 @@ struct cli_def {
   time_t last_action;
   int telnet_protocol;
   void *user_context;
+  struct cli_terminfo *terminfo;
 };
 
 struct cli_filter {
@@ -89,6 +90,17 @@ struct cli_command {
   struct cli_command *next;
   struct cli_command *children;
   struct cli_command *parent;
+};
+
+struct cli_terminfo {
+  int detected_terminal_width;
+  int detected_terminal_height;
+  int user_terminal_width;
+  int user_terminal_height;
+  int terminal_width;
+  int terminal_height;
+  bool enabled;
+  volatile bool terminal_changed;
 };
 
 extern struct cli_def *cli_init();
@@ -131,8 +143,11 @@ extern void cli_telnet_protocol(struct cli_def *cli, int telnet_protocol);
 extern void cli_set_context(struct cli_def *cli, void *context);
 extern void *cli_get_context(struct cli_def *cli);
 
-// Telnet protocol processing
-extern bool cli_handle_telnet(unsigned char c);
+// Set screen size 
+extern void cli_set_detected_terminal_size(struct cli_def *cli, int width, int height) ;
+extern void cli_set_terminal_size(struct cli_def *cli, int width, int height) ;
+void cli_set_terminal_height(struct cli_def *cli, int height);
+void cli_set_terminal_width(struct cli_def *cli, int width);
 #ifdef __cplusplus
 }
 #endif
