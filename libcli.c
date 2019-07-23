@@ -2889,7 +2889,8 @@ static void cli_get_optarg_comphelp(struct cli_def *cli, struct cli_optarg *opta
   char *allow_buildmode = BUILDMODE_NO;
   int (*get_completions)(struct cli_def *, const char *, const char *, struct cli_comphelp *) = NULL;
   char *tptr = NULL;
-
+  char *tname = NULL;
+  
   // if we've already seen a value by this exact name, skip it, unless the multiple flag is set
   if (cli_find_optarg_value(cli, optarg->name, NULL) && !(optarg->flags & (CLI_CMD_OPTION_MULTIPLE))) return;
 
@@ -2932,9 +2933,9 @@ static void cli_get_optarg_comphelp(struct cli_def *cli, struct cli_optarg *opta
   }
 
   // Fill in with help text or completor value(s) as indicated
-  if ((lastchar == '?') && (asprintf(&tptr, "%s%s%s", delim_start, optarg->name, delim_end) != -1)) {
+  if ((lastchar == '?') && (asprintf(&tname, "%s%s%s", delim_start, optarg->name, delim_end) != -1)) {
     if (optarg->flags & CLI_CMD_ALLOW_BUILDMODE) allow_buildmode = BUILDMODE_YES;
-    if (help_insert && (asprintf(&tptr, "  %-20s enter '%s' to %s%s", tptr, optarg->name,
+    if (help_insert && (asprintf(&tptr, "  %-20s enter '%s' to %s%s", tname, optarg->name,
                                  (optarg->help) ? optarg->help : "", allow_buildmode) != -1)) {
       cli_add_comphelp_entry(comphelp, tptr);
       free_z(tptr);
@@ -2951,6 +2952,7 @@ static void cli_get_optarg_comphelp(struct cli_def *cli, struct cli_optarg *opta
       free_z(tptr);
     }
   }
+  free_z(tname);
 }
 
 static void cli_int_parse_optargs(struct cli_def *cli, struct cli_pipeline_stage *stage, struct cli_command *cmd,
